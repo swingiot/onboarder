@@ -4,9 +4,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 
-@Import(TestcontainersConfiguration1.class)
+@Import(TestcontainersConfiguration.class)
 @SpringBootTest
-class OnboarderApplicationTests1 {
+class OnboarderApplicationIT {
 
 	@Test
 	void contextLoads() {
