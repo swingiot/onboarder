@@ -12,7 +12,7 @@ import static io.cucumber.junit.platform.engine.Constants.GLUE_PROPERTY_NAME;
 //@SelectPackages("com.swingiot.onboarder")
 @ConfigurationParameter(key = PLUGIN_PROPERTY_NAME, value = "pretty")
 @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.swingiot.onboarder")
-@SelectClasspathResource("com.swingiot.onboarder")
+@SelectClasspathResource("features")
 @CucumberContextConfiguration
 @SpringBootTest(classes = CucumberIT.class)
 public class CucumberIT {
