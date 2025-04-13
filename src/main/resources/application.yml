@@ -1,3 +1,10 @@
 spring:
   application:
     name: onboarder
+  data:
+    mongodb:
+      uri: mongodb://user:password@localhost:27017/onboarder?authSource=admin
+      database: onboarder
+      repositories:
+        type: auto
+      auto-index-creation: true

@@ -12,7 +12,7 @@
     <artifactId>onboarder</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>onboarder</name>
-    <description>Service for onboarding nodes, assigns configurations and licences.</description>
+    <description>Service for onboarding nodes, assigning configurations and licences.</description>
     <properties>
         <java.version>21</java.version>
     </properties>
