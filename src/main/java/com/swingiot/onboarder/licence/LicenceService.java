@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -31,14 +32,42 @@ public class LicenceService {
     return licenceRepository.getLicenceByTenant_TenantId(tenant);
   }
 
+  public LicensedDevice getLicenseFromMac(String mac) {
+    Licence licence = licenceRepository.getLicenceByMacsIsContaining(Set.of(mac))
+        .orElseThrow(() -> new AuthorizationException("Unregistered mac: " + mac));
+
+    if (!licence.getMacs().contains(mac)) {
+      throw new AuthorizationException("Unregistered mac: " + mac);
+    }
+
+    return LicensedDevice.builder()
+        .components(licence.getComponents())
+        .mac(mac)
+        .allocatedDate(Instant.now())
+        .build();
+  }
+
   public LicensedDevice registerDevice(String licenceKey, String mac) {
     Licence licence = licenceRepository.findByLicenceKey(licenceKey)
         .orElseThrow(() -> new AuthorizationException("Invalid licence key: " + licenceKey));
+    if (licence.getMacs().contains(mac)) {
+      return LicensedDevice.builder()
+          .components(licence.getComponents())
+          .mac(mac)
+          .allocatedDate(Instant.now())
+          .build();
+    }
+
     if (licence.getDevices() <= licence.getMacs().size()) {
       throw new AuthorizationException("Licence is already full. Permitted devices: " + licence.getDevices() + ", Registered devices: " + licence.getMacs().size());
     }
     // remove mac from other licences
-    // add mac to licence
-    return LicensedDevice.builder().build();
+    licence.getMacs().add(mac);
+    return LicensedDevice.builder()
+        .components(licence.getComponents())
+        .mac(mac)
+        .allocatedDate(Instant.now())
+        .build();
   }
+
 }

@@ -8,3 +8,5 @@ spring:
       repositories:
         type: auto
       auto-index-creation: true
+server:
+  port: 8081
