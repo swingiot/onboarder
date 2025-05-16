@@ -62,6 +62,7 @@ public class LicenceService {
           .components(new HashSet<>(product.getComponents()))
           .mac(mac)
           .allocatedDate(Instant.now())
+          .tenant(licence.getTenant())
           .build();
     }
 
@@ -80,6 +81,7 @@ public class LicenceService {
         .components(new HashSet<>(product.getComponents()))
         .mac(mac)
         .allocatedDate(Instant.now())
+        .tenant(licence.getTenant())
         .build();
   }
 

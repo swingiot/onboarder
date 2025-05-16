@@ -3,6 +3,7 @@ package com.swingiot.onboarder.licence;
 import com.swingiot.onboarder.device.Component;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.extern.jackson.Jacksonized;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -12,7 +13,8 @@ import java.util.Set;
 
 @Document
 @Getter
-@Builder
+@Builder(toBuilder = true)
+@Jacksonized
 public class Licence {
   @Id
   private String id;
