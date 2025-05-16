@@ -9,4 +9,4 @@ spring:
         type: auto
       auto-index-creation: true
 server:
-  port: 8081
+  port: 8083

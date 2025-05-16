@@ -3,14 +3,10 @@ services:
     build: .
     image: onboarder:latest
     environment:
-      - spring.data.mongodb.uri=mongodb://mongodb:27017/onboarder?authSource=admin
+      - spring.data.mongodb.uri=mongodb://user:password@localhost:27017/onboarder?authSource=admin
       - SPRING_PROFILES_ACTIVE=docker
     ports:
-      - "8080:8080"
-    links:
-      - mongodb
-    depends_on:
-      - mongodb
+      - "8083:8083"
   mongodb:
     image: mongo:6.0.5
     environment:

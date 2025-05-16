@@ -4,5 +4,16 @@ import lombok.Getter;
 
 @Getter
 public enum Component {
-  SYSTEM, CLASSIT
+  SYSTEM,
+  PWM,
+  LIGHT_SENSOR,
+  POWER_METER,
+  PRESENCE_SENSOR,
+  RELAY,
+  RGB,
+  CAMERA,
+  FAN_COIL,
+  TEMP_SENSOR,
+  DAYLIGHT,
+  CLASSIT
 }

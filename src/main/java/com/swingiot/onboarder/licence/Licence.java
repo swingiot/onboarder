@@ -20,7 +20,7 @@ public class Licence {
   private String licenceKey;
   private int devices;
   private Tenant tenant;
-  private Set<Component> components;
+  private String productName;
   private Set<String> macs;
   private Instant createdDate;
   private Instant modifiedDate;

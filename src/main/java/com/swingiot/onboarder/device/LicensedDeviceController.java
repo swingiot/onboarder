@@ -1,6 +1,5 @@
 package com.swingiot.onboarder.device;
 
-import com.swingiot.onboarder.licence.Licence;
 import com.swingiot.onboarder.licence.LicenceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -16,8 +15,8 @@ public class LicensedDeviceController {
     return licenceService.registerDevice(registerDevice.licenceKey(), registerDevice.mac());
   }
 
-  @GetMapping
-  public LicensedDevice getLicence(String mac) {
-    return licenceService.getLicenseFromMac(mac);
+  @GetMapping("/{mac}")
+  public LicensedDevice getLicence(@PathVariable String mac) {
+    return licenceService.getLicenceFromMac(mac);
   }
 }

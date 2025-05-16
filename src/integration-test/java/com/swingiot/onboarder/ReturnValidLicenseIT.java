@@ -4,6 +4,7 @@ import com.swingiot.onboarder.device.Component;
 import com.swingiot.onboarder.device.LicensedDevice;
 import com.swingiot.onboarder.licence.LicenceRepository;
 import com.swingiot.onboarder.licence.LicenceService;
+import com.swingiot.onboarder.product.ProductsRepository;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
@@ -16,6 +17,7 @@ public class ReturnValidLicenseIT {
   private LicensedDevice licensedDevice;
 
   private LicenceRepository licenceRepository;
+  private ProductsRepository productsRepository;
 
   @Given("a valid license key {string}")
   public void a_valid_license_key(String licenceKey) {
@@ -29,7 +31,7 @@ public class ReturnValidLicenseIT {
   public void asked_to_register_the_device() {
     // Write code here that turns the phrase above into concrete actions
 //    throw new io.cucumber.java.PendingException();
-    licensedDevice = new LicenceService(licenceRepository).registerDevice(licenceKey, mac);
+    licensedDevice = new LicenceService(licenceRepository, productsRepository).registerDevice(licenceKey, mac);
   }
   @Then("register device and return available components")
   public void register_device_and_return_available_components() {
