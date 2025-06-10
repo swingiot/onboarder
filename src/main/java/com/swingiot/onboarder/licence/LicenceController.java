@@ -1,5 +1,6 @@
 package com.swingiot.onboarder.licence;
 
+import com.swingiot.onboarder.exception.InvalidRequestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,7 +20,7 @@ public class LicenceController {
   @GetMapping
   public List<Licence> getLicences(@RequestParam("tenant") String tenantId) {
     if (tenantId == null || tenantId.isEmpty()) {
-      throw new RuntimeException("Tenant id could not be null or empty");
+      throw new InvalidRequestException("Tenant id could not be null or empty");
     }
     return licenceService.getLicences(tenantId);
   }

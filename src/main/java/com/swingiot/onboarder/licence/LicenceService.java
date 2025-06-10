@@ -1,6 +1,7 @@
 package com.swingiot.onboarder.licence;
 
 import com.swingiot.onboarder.device.LicensedDevice;
+import com.swingiot.onboarder.exception.InvalidRequestException;
 import com.swingiot.onboarder.product.Product;
 import com.swingiot.onboarder.product.ProductsRepository;
 import lombok.AllArgsConstructor;
@@ -38,10 +39,10 @@ public class LicenceService {
 
   public LicensedDevice getLicenceFromMac(String mac) {
     Licence licence = licenceRepository.getLicenceByMacsIsContaining(Set.of(mac))
-        .orElseThrow(() -> new AuthorizationException("Unregistered mac: " + mac));
+        .orElseThrow(() -> new InvalidRequestException("Unregistered mac: " + mac));
 
     Product product = productsRepository.getProductByName(licence.getProductName())
-        .orElseThrow(() -> new AuthorizationException("Unregistered mac: " + mac));
+        .orElseThrow(() -> new InvalidRequestException("Unregistered mac: " + mac));
 
     return LicensedDevice.builder()
         .components(new HashSet<>(product.getComponents()))
@@ -52,10 +53,10 @@ public class LicenceService {
 
   public LicensedDevice registerDevice(String licenceKey, String mac) {
     Licence licence = licenceRepository.findByLicenceKey(licenceKey)
-        .orElseThrow(() -> new AuthorizationException("Invalid licence key: " + licenceKey));
+        .orElseThrow(() -> new InvalidRequestException("Invalid licence key: " + licenceKey));
 
     Product product = productsRepository.getProductByName(licence.getProductName())
-        .orElseThrow(() -> new AuthorizationException("Unregistered mac: " + mac));
+        .orElseThrow(() -> new InvalidRequestException("Unregistered mac: " + mac));
 
     if (licence.getMacs().contains(mac)) {
       return LicensedDevice.builder()
@@ -67,7 +68,7 @@ public class LicenceService {
     }
 
     if (licence.getDevices() <= licence.getMacs().size()) {
-      throw new AuthorizationException("Licence is already full. Permitted devices: " + licence.getDevices() + ", Registered devices: " + licence.getMacs().size());
+      throw new InvalidRequestException("Licence is already full. Permitted devices: " + licence.getDevices() + ", Registered devices: " + licence.getMacs().size());
     }
 
     licenceRepository.getLicenceByMacsIsContaining(Set.of(mac)).ifPresent(l -> {

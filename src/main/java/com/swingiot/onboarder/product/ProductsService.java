@@ -1,6 +1,6 @@
 package com.swingiot.onboarder.product;
 
-import com.swingiot.onboarder.InvalidRequestException;
+import com.swingiot.onboarder.exception.InvalidRequestException;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 

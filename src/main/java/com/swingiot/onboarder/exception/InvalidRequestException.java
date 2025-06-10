@@ -1,4 +1,4 @@
-package com.swingiot.onboarder;
+package com.swingiot.onboarder.exception;
 
 public class InvalidRequestException extends RuntimeException {
   public InvalidRequestException(String message) {
