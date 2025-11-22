@@ -16,4 +16,5 @@ public class LicensedDevice {
   private Set<Component> components;
   private Instant allocatedDate;
   private Tenant tenant;
+  private String productName;
 }

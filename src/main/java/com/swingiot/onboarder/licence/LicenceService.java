@@ -12,7 +12,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
@@ -80,6 +79,7 @@ public class LicenceService {
     licenceRepository.save(licence);
     return LicensedDevice.builder()
         .components(new HashSet<>(product.getComponents()))
+        .productName(licence.getProductName())
         .mac(mac)
         .allocatedDate(Instant.now())
         .tenant(licence.getTenant())
