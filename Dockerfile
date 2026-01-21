@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21-jre-alpine
-ARG JAR_FILE=target/*-SNAPSHOT.jar
+FROM eclipse-temurin:24-jre
+ARG JAR_FILE=target/*.jar
 COPY ${JAR_FILE} onboarder.jar
-ENTRYPOINT ["java", "-Dspring.profiles.active=docker","-jar","/onboarder.jar"]
+ENTRYPOINT ["java", "-jar", "/onboarder.jar"]
