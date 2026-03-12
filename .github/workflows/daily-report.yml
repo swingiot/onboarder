@@ -258,42 +258,44 @@ jobs:
                        "Content-Type": "application/x-www-form-urlencoded"},
               method="POST"
           )
+          file_uploaded = False
           with urllib.request.urlopen(step1) as r:
               upload_info = json.loads(r.read())
           if not upload_info.get("ok"):
-              print(f"Upload URL error: {upload_info.get('error')}")
-              sys.exit(1)
+              print(f"⚠️  File upload skipped ({upload_info.get('error')}) — Slack message will still be sent.")
+              print(f"   To enable report attachments: add 'files:write' scope to your Slack bot at api.slack.com/apps")
+          else:
+              upload_url = upload_info["upload_url"]
+              file_id    = upload_info["file_id"]
 
-          upload_url = upload_info["upload_url"]
-          file_id    = upload_info["file_id"]
+              # Step 2: upload file content
+              step2 = urllib.request.Request(
+                  upload_url,
+                  data=html_bytes,
+                  headers={"Content-Type": "text/html; charset=utf-8"},
+                  method="POST"
+              )
+              with urllib.request.urlopen(step2): pass
 
-          # Step 2: upload file content
-          step2 = urllib.request.Request(
-              upload_url,
-              data=html_bytes,
-              headers={"Content-Type": "text/html; charset=utf-8"},
-              method="POST"
-          )
-          with urllib.request.urlopen(step2): pass
-
-          # Step 3: complete upload and share to channel
-          step3 = urllib.request.Request(
-              "https://slack.com/api/files.completeUploadExternal",
-              data=json.dumps({
-                  "files":           [{"id": file_id, "title": f"Daily Report · {today_str}"}],
-                  "channel_id":      CHANNEL,
-                  "initial_comment": f"📊 *Daily Report — {today_str}*\nOpen the attachment for the full report with all ticket details and links."
-              }).encode(),
-              headers={"Authorization": f"Bearer {SLACK_TOKEN}",
-                       "Content-Type": "application/json"},
-              method="POST"
-          )
-          with urllib.request.urlopen(step3) as r:
-              complete = json.loads(r.read())
-          if not complete.get("ok"):
-              print(f"Complete upload error: {complete.get('error')}")
-              sys.exit(1)
-          print(f"✅ File uploaded: {file_id}")
+              # Step 3: complete upload and share to channel
+              step3 = urllib.request.Request(
+                  "https://slack.com/api/files.completeUploadExternal",
+                  data=json.dumps({
+                      "files":           [{"id": file_id, "title": f"Daily Report · {today_str}"}],
+                      "channel_id":      CHANNEL,
+                      "initial_comment": f"📊 *Daily Report — {today_str}*\nOpen the attachment for the full report with all ticket details and links."
+                  }).encode(),
+                  headers={"Authorization": f"Bearer {SLACK_TOKEN}",
+                           "Content-Type": "application/json"},
+                  method="POST"
+              )
+              with urllib.request.urlopen(step3) as r:
+                  complete = json.loads(r.read())
+              if not complete.get("ok"):
+                  print(f"⚠️  File complete error: {complete.get('error')}")
+              else:
+                  file_uploaded = True
+                  print(f"✅ File uploaded: {file_id}")
 
           # ── Post insights message to channel ─────────────────────────────
           msg_req = urllib.request.Request(
