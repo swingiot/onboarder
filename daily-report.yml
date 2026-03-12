@@ -1,0 +1,315 @@
+name: Daily Team Report → #swingiot-dev
+
+on:
+  schedule:
+    - cron: '30 2 * * 1-5'   # 08:00 IST weekdays (UTC+5:30 = UTC 02:30)
+  workflow_dispatch:          # allow manual trigger from GitHub UI
+
+jobs:
+  daily-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate report and post to Slack
+        env:
+          JIRA_EMAIL:      ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN:      ${{ secrets.JIRA_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL:   C027FT0KPUP
+          JIRA_BASE:       https://swingiot.atlassian.net
+        run: |
+          python3 << 'PYEOF'
+          import base64, json, urllib.request, urllib.error, urllib.parse, datetime, os, sys
+
+          # ── Credentials ───────────────────────────────────────────────────
+          JIRA_BASE   = os.environ["JIRA_BASE"]
+          JIRA_EMAIL  = os.environ["JIRA_EMAIL"]
+          JIRA_TOKEN  = os.environ["JIRA_TOKEN"]
+          SLACK_TOKEN = os.environ["SLACK_BOT_TOKEN"]
+          CHANNEL     = os.environ["SLACK_CHANNEL"]
+          JIRA_AUTH   = base64.b64encode(f"{JIRA_EMAIL}:{JIRA_TOKEN}".encode()).decode()
+
+          today     = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5,minutes=30)))
+          today_str = today.strftime("%A, %d %B %Y")
+          date_key  = today.strftime("%Y-%m-%d")
+
+          # ── Jira fetch ────────────────────────────────────────────────────
+          def jira_post(path, body):
+              req = urllib.request.Request(
+                  f"{JIRA_BASE}{path}",
+                  data=json.dumps(body).encode(),
+                  headers={"Authorization": f"Basic {JIRA_AUTH}",
+                           "Accept": "application/json",
+                           "Content-Type": "application/json"},
+                  method="POST"
+              )
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read())
+
+          raw = jira_post("/rest/api/3/search/jql", {
+              "jql": "project=SI ORDER BY updated DESC",
+              "maxResults": 80,
+              "fields": ["summary","status","assignee","priority","updated","issuetype","created"]
+          })
+
+          issues = raw.get("issues", [])
+
+          # ── Categorise ────────────────────────────────────────────────────
+          todo, in_progress, review, qa, done_today = [], [], [], [], []
+
+          PRIORITY_RANK = {"Highest":0,"High":1,"Medium":2,"Low":3,"Lowest":4}
+
+          for issue in issues:
+              f        = issue["fields"]
+              key      = issue["key"]
+              summary  = f.get("summary","")[:70]
+              status   = f.get("status",{}).get("name","")
+              assignee = f["assignee"]["displayName"] if f.get("assignee") else "Unassigned"
+              priority = f.get("priority",{}).get("name","Medium") if f.get("priority") else "Medium"
+              updated  = f.get("updated","")[:10]
+              url      = f"{JIRA_BASE}/browse/{key}"
+
+              row = dict(key=key, summary=summary, status=status,
+                         assignee=assignee, priority=priority, updated=updated, url=url)
+
+              if   status in ("To Do","Open"):        todo.append(row)
+              elif status == "In Progress":            in_progress.append(row)
+              elif status.lower() == "review":         review.append(row)
+              elif status.upper() == "QA":             qa.append(row)
+              elif status == "Done" and updated == date_key: done_today.append(row)
+
+          todo.sort(key=lambda x: PRIORITY_RANK.get(x["priority"], 9))
+
+          # ── Flags ─────────────────────────────────────────────────────────
+          flags = []
+          highest = [t for t in todo if t["priority"] == "Highest"]
+          if highest:
+              names = ", ".join(set(t["assignee"] for t in highest))
+              flags.append(f"🔴 *{len(highest)} Highest-priority ticket(s) unstarted* — {names}")
+
+          stale_qa = [t for t in qa if t["updated"] < date_key]
+          if stale_qa:
+              flags.append(f"⏳ *{len(stale_qa)} QA ticket(s) with no update today* — may need sign-off push")
+
+          if len(in_progress) == 0:
+              flags.append("⚠️ *No tickets In Progress* — check if team is blocked or forgot to update Jira")
+
+          unknown_assignees = [t for t in todo + in_progress + qa
+                               if t["assignee"] not in
+                               ("Isuru Liyanage","Omer Boucai","Rasika Lakmal",
+                                "Shahaf Zuk","Shantha padmasiri","Gilad Ravid","Unassigned")]
+          seen = set()
+          for t in unknown_assignees:
+              if t["assignee"] not in seen:
+                  flags.append(f"❓ Ticket assigned to *{t['assignee']}* — confirm active team member")
+                  seen.add(t["assignee"])
+
+          # ── Build Slack message blocks ────────────────────────────────────
+          def pill(status):
+              m = {"To Do":"⬜","In Progress":"🔵","review":"🟠","QA":"🟣","Done":"✅"}
+              return m.get(status, "⬜")
+
+          def prio_icon(p):
+              return {"Highest":"🔴","High":"🟠","Medium":"🟡","Low":"⚪"}.get(p,"")
+
+          def ticket_line(t):
+              return f"{pill(t['status'])} {prio_icon(t['priority'])} <{t['url']}|*{t['key']}*> {t['summary']} — _{t['assignee']}_"
+
+          blocks = [
+              {"type":"header","text":{"type":"plain_text","text":f"📊 Daily Team Report · {today_str}"}},
+              {"type":"section","text":{"type":"mrkdwn","text":
+                  f"*Pipeline:*  ⬜ {len(todo)} To Do  ·  🔵 {len(in_progress)} In Dev  ·  🟠 {len(review)} Review  ·  🟣 {len(qa)} QA  ·  ✅ {len(done_today)} closed today"}},
+              {"type":"divider"},
+          ]
+
+          # Flags section
+          if flags:
+              blocks.append({"type":"section","text":{"type":"mrkdwn",
+                  "text":"*⚡ Flags & Reminders:*\n" + "\n".join(f"  • {f}" for f in flags)}})
+              blocks.append({"type":"divider"})
+
+          # Highest priority to-do
+          if highest:
+              lines = "\n".join(ticket_line(t) for t in highest[:5])
+              blocks.append({"type":"section","text":{"type":"mrkdwn",
+                  "text":f"*🔥 Highest Priority — Needs Action:*\n{lines}"}})
+
+          # In progress
+          if in_progress:
+              lines = "\n".join(ticket_line(t) for t in in_progress[:5])
+              blocks.append({"type":"section","text":{"type":"mrkdwn",
+                  "text":f"*🔵 In Progress:*\n{lines}"}})
+
+          # QA queue
+          if qa:
+              lines = "\n".join(ticket_line(t) for t in qa[:5])
+              blocks.append({"type":"section","text":{"type":"mrkdwn",
+                  "text":f"*🟣 In QA — Awaiting Sign-off:*\n{lines}"}})
+
+          # Done today
+          if done_today:
+              lines = "\n".join(ticket_line(t) for t in done_today[:5])
+              blocks.append({"type":"section","text":{"type":"mrkdwn",
+                  "text":f"*✅ Closed Today:*\n{lines}"}})
+
+          blocks.append({"type":"context","elements":[{"type":"mrkdwn",
+              "text":f"Full HTML report attached below · Click any ticket to open in Jira · swingiot.atlassian.net/jira/software/projects/SI/list"}]})
+
+          # ── Generate HTML report ─────────────────────────────────────────
+          def prio_badge(p):
+              colors = {"Highest":"#ff3b30","High":"#ff9f0a","Medium":"#8e8e93","Low":"#c7c7cc"}
+              return f'<span style="color:{colors.get(p,"#8e8e93")};font-weight:700;font-size:11px">{p}</span>'
+
+          def status_pill(s):
+              styles = {
+                  "To Do":       "background:#f5f5f5;color:#616161",
+                  "In Progress": "background:#e3f2fd;color:#1565c0",
+                  "review":      "background:#fff3e0;color:#e65100",
+                  "QA":          "background:#f3e5f5;color:#6a1b9a",
+                  "Done":        "background:#e8f5e9;color:#2e7d32",
+              }
+              st = styles.get(s, "background:#f5f5f5;color:#616161")
+              return f'<span style="display:inline-block;border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;text-transform:uppercase;{st}">{s}</span>'
+
+          def rows(items, limit=20):
+              out = ""
+              for t in items[:limit]:
+                  out += f"""<tr>
+                    <td><a href="{t['url']}" style="color:#0a84ff;font-weight:700;text-decoration:none">{t['key']}</a></td>
+                    <td style="max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{t['summary']}</td>
+                    <td>{prio_badge(t['priority'])}</td>
+                    <td>{t['assignee']}</td>
+                    <td>{status_pill(t['status'])}</td>
+                    <td style="color:#8e8e93;font-size:11px">{t['updated']}</td>
+                  </tr>"""
+              return out
+
+          table_style = """
+            table{width:100%;border-collapse:collapse;font-size:13px}
+            th{background:#f8f9fa;color:#8e8e93;font-size:10px;text-transform:uppercase;
+               letter-spacing:.5px;padding:9px 12px;text-align:left;border-bottom:1px solid #e9ecef}
+            td{padding:9px 12px;border-bottom:1px solid #f2f2f7;vertical-align:middle}
+            tr:last-child td{border-bottom:none}
+            tr:hover td{background:#f9fafb}
+          """
+
+          flag_html = ""
+          for f in flags:
+              # strip markdown bold markers for HTML
+              clean = f.replace("*","<strong>",1).replace("*","</strong>",1)
+              color = "#fff0f0" if "🔴" in f else "#fff9f0"
+              border = "#ff3b30" if "🔴" in f else "#ff9f0a"
+              flag_html += f'<div style="background:{color};border-left:3px solid {border};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:8px;font-size:13px">{clean}</div>'
+
+          html = f"""<!DOCTYPE html><html lang="en"><head>
+          <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>SwingIoT Daily Report · {today_str}</title>
+          <style>
+            *{{box-sizing:border-box;margin:0;padding:0}}
+            body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f6f9;color:#1a1a2e}}
+            .hdr{{background:linear-gradient(135deg,#1a1a2e,#0f3460);color:white;padding:28px 36px}}
+            .hdr h1{{font-size:22px;font-weight:700}}.hdr p{{font-size:13px;opacity:.6;margin-top:4px}}
+            .wrap{{max-width:1060px;margin:0 auto;padding:24px}}
+            .stats{{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px}}
+            .stat{{background:white;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.07)}}
+            .stat .n{{font-size:32px;font-weight:800;line-height:1}}
+            .stat .l{{font-size:10px;color:#8e8e93;font-weight:700;text-transform:uppercase;margin-top:4px}}
+            .card{{background:white;border-radius:12px;padding:20px 22px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:18px}}
+            .card-title{{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#8e8e93;margin-bottom:14px}}
+            {table_style}
+            .note{{font-size:11px;color:#c7c7cc;text-align:center;margin-top:16px}}
+          </style></head><body>
+          <div class="hdr">
+            <div style="font-size:10px;font-weight:700;letter-spacing:3px;opacity:.4;text-transform:uppercase;margin-bottom:4px">SwingIoT</div>
+            <h1>Daily Team Report</h1>
+            <p>{today_str} · Generated 08:00 IST · Source: Jira (swingiot.atlassian.net)</p>
+          </div>
+          <div class="wrap">
+            <div class="stats">
+              <div class="stat"><div class="n" style="color:#8e8e93">{len(todo)}</div><div class="l">To Do</div></div>
+              <div class="stat"><div class="n" style="color:#0a84ff">{len(in_progress)}</div><div class="l">In Dev</div></div>
+              <div class="stat"><div class="n" style="color:#ff9f0a">{len(review)}</div><div class="l">Review</div></div>
+              <div class="stat"><div class="n" style="color:#af52de">{len(qa)}</div><div class="l">QA</div></div>
+              <div class="stat"><div class="n" style="color:#34c759">{len(done_today)}</div><div class="l">Done Today</div></div>
+            </div>
+            {"<div class='card'><div class='card-title'>⚡ Flags & Reminders</div>" + flag_html + "</div>" if flags else ""}
+            {"<div class='card'><div class='card-title'>🔥 Highest Priority — Unstarted</div><table><thead><tr><th>Key</th><th>Summary</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Updated</th></tr></thead><tbody>" + rows(highest) + "</tbody></table></div>" if highest else ""}
+            {"<div class='card'><div class='card-title'>🔵 In Progress</div><table><thead><tr><th>Key</th><th>Summary</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Updated</th></tr></thead><tbody>" + rows(in_progress) + "</tbody></table></div>" if in_progress else ""}
+            {"<div class='card'><div class='card-title'>🟣 In QA</div><table><thead><tr><th>Key</th><th>Summary</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Updated</th></tr></thead><tbody>" + rows(qa) + "</tbody></table></div>" if qa else ""}
+            {"<div class='card'><div class='card-title'>✅ Closed Today</div><table><thead><tr><th>Key</th><th>Summary</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Updated</th></tr></thead><tbody>" + rows(done_today) + "</tbody></table></div>" if done_today else ""}
+            <div class='card'><div class='card-title'>📋 All Open Tickets (To Do)</div>
+              <table><thead><tr><th>Key</th><th>Summary</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Updated</th></tr></thead>
+              <tbody>{rows(todo, 30)}</tbody></table></div>
+            <div class="note">Auto-generated by SwingIoT GitHub Actions · All ticket IDs link to Jira</div>
+          </div></body></html>"""
+
+          html_bytes = html.encode("utf-8")
+
+          # ── Upload HTML file to Slack ─────────────────────────────────────
+          filename = f"swingiot-daily-report-{date_key}.html"
+
+          # Step 1: get upload URL
+          step1 = urllib.request.Request(
+              "https://slack.com/api/files.getUploadURLExternal",
+              data=urllib.parse.urlencode({
+                  "filename": filename,
+                  "length":   len(html_bytes)
+              }).encode(),
+              headers={"Authorization": f"Bearer {SLACK_TOKEN}",
+                       "Content-Type": "application/x-www-form-urlencoded"},
+              method="POST"
+          )
+          with urllib.request.urlopen(step1) as r:
+              upload_info = json.loads(r.read())
+          if not upload_info.get("ok"):
+              print(f"Upload URL error: {upload_info.get('error')}")
+              sys.exit(1)
+
+          upload_url = upload_info["upload_url"]
+          file_id    = upload_info["file_id"]
+
+          # Step 2: upload file content
+          step2 = urllib.request.Request(
+              upload_url,
+              data=html_bytes,
+              headers={"Content-Type": "text/html; charset=utf-8"},
+              method="POST"
+          )
+          with urllib.request.urlopen(step2): pass
+
+          # Step 3: complete upload and share to channel
+          step3 = urllib.request.Request(
+              "https://slack.com/api/files.completeUploadExternal",
+              data=json.dumps({
+                  "files":           [{"id": file_id, "title": f"Daily Report · {today_str}"}],
+                  "channel_id":      CHANNEL,
+                  "initial_comment": f"📊 *Daily Report — {today_str}*\nOpen the attachment for the full report with all ticket details and links."
+              }).encode(),
+              headers={"Authorization": f"Bearer {SLACK_TOKEN}",
+                       "Content-Type": "application/json"},
+              method="POST"
+          )
+          with urllib.request.urlopen(step3) as r:
+              complete = json.loads(r.read())
+          if not complete.get("ok"):
+              print(f"Complete upload error: {complete.get('error')}")
+              sys.exit(1)
+          print(f"✅ File uploaded: {file_id}")
+
+          # ── Post insights message to channel ─────────────────────────────
+          msg_req = urllib.request.Request(
+              "https://slack.com/api/chat.postMessage",
+              data=json.dumps({"channel": CHANNEL, "blocks": blocks,
+                               "text": f"Daily Report {today_str}",
+                               "unfurl_links": False}).encode(),
+              headers={"Authorization": f"Bearer {SLACK_TOKEN}",
+                       "Content-Type": "application/json"},
+              method="POST"
+          )
+          with urllib.request.urlopen(msg_req) as r:
+              result = json.loads(r.read())
+          if result.get("ok"):
+              print(f"✅ Slack message posted to #swingiot-dev")
+          else:
+              print(f"❌ Slack error: {result.get('error')}")
+
+          PYEOF
