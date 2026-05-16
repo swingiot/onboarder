@@ -50,6 +50,16 @@ public class LicenceService {
         .build();
   }
 
+  public Licence updateDeviceCount(String id, int devices) {
+    Licence licence = licenceRepository.findById(id)
+        .orElseThrow(() -> new InvalidRequestException("Licence not found: " + id));
+    if (devices < licence.getMacs().size()) {
+      throw new InvalidRequestException("Cannot reduce below current usage: " + licence.getMacs().size());
+    }
+    Licence updated = licence.toBuilder().devices(devices).modifiedDate(Instant.now()).build();
+    return licenceRepository.save(updated);
+  }
+
   public LicensedDevice registerDevice(String licenceKey, String mac) {
     Licence licence = licenceRepository.findByLicenceKey(licenceKey)
         .orElseThrow(() -> new InvalidRequestException("Invalid licence key: " + licenceKey));

@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/licences")
@@ -23,5 +24,10 @@ public class LicenceController {
       throw new InvalidRequestException("Tenant id could not be null or empty");
     }
     return licenceService.getLicences(tenantId);
+  }
+
+  @PatchMapping("/{id}")
+  public Licence updateLicence(@PathVariable String id, @RequestBody Map<String, Integer> body) {
+    return licenceService.updateDeviceCount(id, body.get("devices"));
   }
 }
